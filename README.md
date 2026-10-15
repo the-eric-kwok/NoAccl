@@ -1,6 +1,12 @@
 # NoAccl
 
-NoAccl 是面向 iOS 15 rootless 越狱环境的 Core Motion 访问控制插件。插件默认拒绝未授权应用的加速度计和设备运动数据，只允许通过弹窗或系统设置加入白名单的应用访问。
+NoAccl 是面向 iOS 15 及以上 rootless 越狱环境的 Core Motion 访问控制插件。插件默认拒绝未授权应用的加速度计和设备运动数据，只允许通过弹窗或系统设置加入白名单的应用访问。
+
+## iOS 版本兼容性
+
+当前代码使用的 Core Motion 入口在 iOS 4.0 及更早版本已经存在，前台窗口查找使用的 `UIWindowScene`／`connectedScenes` 从 iOS 13.0 起可用。结合当前 rootless 打包方式，**无需修改插件源码即可理论支持 iOS 15 及更高版本**。目前只在 iOS 15 上完成过实际测试，iOS 16 及更高版本尚未完成设备验证；能否正常使用还取决于对应版本的 rootless 越狱、注入框架、PreferenceLoader 和 Cephei。
+
+这里的“适配”表示源码/API 和安装包版本约束已经满足，不等同于每个 iOS 版本或越狱方案都完成了设备实测。实际安装还需要对应版本可用的 rootless 越狱、注入框架、PreferenceLoader 和 Cephei；未验证的版本请先用 `probe/` 测试宿主确认拦截行为。
 
 源码仓库：<https://github.com/the-eric-kwok/NoAccl>
 
@@ -23,7 +29,7 @@ make test
 make package FINALPACKAGE=1
 ```
 
-构建需要 Theos rootless 工具链和 iOS 27.1 SDK。产物分别位于 `packages/` 与 `probe/packages/`。
+构建需要 Theos rootless 工具链和 iOS 27.0 SDK，deployment target 为 iOS 15.0。产物分别位于 `packages/` 与 `probe/packages/`。
 
 ## 安装
 

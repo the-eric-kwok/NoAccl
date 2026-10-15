@@ -1,6 +1,6 @@
 export THEOS_PACKAGE_SCHEME = rootless
 THEOS ?= /opt/theos
-TARGET := iphone:clang:27.1:15.0
+TARGET := iphone:clang:27.0:15.0
 ARCHS := arm64
 include $(THEOS)/makefiles/common.mk
 APPLICATION_NAME := NoAcclProbe
