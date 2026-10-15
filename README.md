@@ -21,14 +21,13 @@ NoAccl 依赖应用进程注入和 `CMMotionManager` 公开 Objective-C 入口�
 ```sh
 make test
 make package FINALPACKAGE=1
-make -C probe package FINALPACKAGE=1
 ```
 
 构建需要 Theos rootless 工具链和 iOS 27.1 SDK。产物分别位于 `packages/` 与 `probe/packages/`。
 
 ## 安装
 
-可从 [Releases](https://github.com/the-eric-kwok/NoAccl/releases) 下载 DEB。安装顺序为 `ws.hbang.common`、`com.noaccl.tweak`、可选 `com.noaccl.probe`。主插件安装后按包管理器要求 respring，让 PreferenceLoader 重新加载设置入口。
+可从 [Releases](https://github.com/the-eric-kwok/NoAccl/releases) 下载主插件 DEB。安装顺序为 `ws.hbang.common`、`com.noaccl.tweak`。主插件安装后按包管理器要求 respring，让 PreferenceLoader 重新加载设置入口。
 
 也可以在 Sileo／Zebra 中添加 Eric 的 Cydia repo：
 
@@ -39,3 +38,7 @@ https://the-eric-kwok.github.io/cydia/
 ## 许可证
 
 MIT License
+
+## 开发验证
+
+`probe/` 是开发阶段专用的 Core Motion 测试宿主，只用于在越狱设备上验证拦截效果；它不会发布到 GitHub Release，也不会进入 Cydia repo。
