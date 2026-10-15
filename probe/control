@@ -1,0 +1,9 @@
+Package: com.noaccl.probe
+Name: NoAccl Probe
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: On-device CoreMotion verification host for NoAccl.
+Maintainer: 郭耀铭
+Author: 郭耀铭
+Section: Development
+Depends: firmware (>= 15.0)

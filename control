@@ -1,0 +1,10 @@
+Package: com.noaccl.tweak
+Name: NoAccl
+Version: 0.1.0
+Architecture: iphoneos-arm
+Description: Per-application accelerometer access control for iOS 15 jailbreaks.
+Maintainer: 郭耀铭
+Author: 郭耀铭
+Section: Tweaks
+License: MIT
+Depends: firmware (>= 15.0), mobilesubstrate, preferenceloader, ws.hbang.common

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.noaccl.probe</string>
+<key>CFBundleExecutable</key><string>NoAcclProbe</string>
+<key>CFBundleName</key><string>NoAcclProbe</string>
+<key>CFBundleDisplayName</key><string>NoAccl 测试</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>MinimumOSVersion</key><string>15.0</string>
+<key>LSRequiresIPhoneOS</key><true/>
+<key>UILaunchScreen</key><dict/>
+<key>NSMotionUsageDescription</key><string>验证 NoAccl 对运动传感器数据的拦截。</string>
+</dict></plist>
