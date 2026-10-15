@@ -29,7 +29,7 @@ make test
 make package FINALPACKAGE=1
 ```
 
-构建需要 Theos rootless 工具链和 iOS 27.0 SDK，deployment target 为 iOS 15.0。产物分别位于 `packages/` 与 `probe/packages/`。
+构建需要 Theos rootless 工具链和 iOS 27.0 SDK，deployment target 为 iOS 15.0。当前 Cydia 发布版本为 `0.2.1`。产物分别位于 `packages/` 与 `probe/packages/`。
 
 ## 安装
 
