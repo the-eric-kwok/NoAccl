@@ -5,13 +5,13 @@ ARCHS := arm64 arm64e
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME := NoAccl
-NoAccl_FILES := Tweak.xm NoAcclPolicy.m NoAcclRule.m
+NoAccl_FILES := Tweak.xm NoAcclPolicy.m NoAcclRule.m NoAcclStore.m
 NoAccl_CFLAGS := -fobjc-arc -Wno-deprecated-declarations
 NoAccl_FRAMEWORKS := Foundation UIKit CoreMotion
 NoAccl_EXTRA_FRAMEWORKS := Cephei
 
 BUNDLE_NAME := NoAcclPrefs
-NoAcclPrefs_FILES := NoAcclPrefs/NoAcclPrefs.m NoAcclPolicy.m NoAcclRule.m
+NoAcclPrefs_FILES := NoAcclPrefs/NoAcclPrefs.m NoAcclPolicy.m NoAcclRule.m NoAcclStore.m
 NoAcclPrefs_FRAMEWORKS := Foundation UIKit
 NoAcclPrefs_PRIVATE_FRAMEWORKS := Preferences
 NoAcclPrefs_LDFLAGS := -F$(THEOS_PROJECT_DIR)/vendor

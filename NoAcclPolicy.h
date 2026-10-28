@@ -13,6 +13,8 @@ FOUNDATION_EXPORT void NoAcclSetDecisionForBundle(NSString *bundleID, NoAcclDeci
 FOUNDATION_EXPORT void NoAcclRemoveDecisionForBundle(NSString *bundleID);
 FOUNDATION_EXPORT void NoAcclResetAllDecisions(void);
 FOUNDATION_EXPORT NSDictionary *NoAcclAllDecisions(void);
+FOUNDATION_EXPORT NSSet<NSString *> *NoAcclRequestedBundleIDs(void);
+FOUNDATION_EXPORT void NoAcclMarkCurrentProcessRequested(void);
 FOUNDATION_EXPORT BOOL NoAcclEnabled(void);
 FOUNDATION_EXPORT void NoAcclSetEnabled(BOOL enabled);
 FOUNDATION_EXPORT void NoAcclPresentFirstRequestIfNeeded(void);

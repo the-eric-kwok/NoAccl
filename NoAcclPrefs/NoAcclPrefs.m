@@ -1,5 +1,6 @@
 // Created by 郭耀铭 on 2026/10/15.
 #import <Preferences/PSViewController.h>
+#import <UIKit/UIImage+Private.h>
 #import <dlfcn.h>
 #import "../NoAcclPolicy.h"
 
@@ -13,11 +14,11 @@
 @property (nonatomic, readonly) NSString *applicationType;
 @end
 
-@interface NoAcclPrefsController : PSViewController <UITableViewDelegate, UITableViewDataSource, UISearchResultsUpdating>
+@interface NoAcclPrefsController : PSViewController <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic) UITableView *table;
 @property (nonatomic) NSArray<NSDictionary *> *applications;
-@property (nonatomic) NSArray<NSDictionary *> *filtered;
-@property (nonatomic) UISearchController *search;
+@property (nonatomic) NSCache<NSString *, UIImage *> *icons;
+@property (nonatomic) NSDictionary *decisions;
 @end
 
 @implementation NoAcclPrefsController
@@ -29,52 +30,65 @@
     self.table.delegate = self;
     self.table.dataSource = self;
     [self.view addSubview:self.table];
-    self.search = [[UISearchController alloc] initWithSearchResultsController:nil];
-    self.search.searchResultsUpdater = self;
-    self.search.obscuresBackgroundDuringPresentation = NO;
-    self.search.searchBar.placeholder = @"搜索应用名称或标识符";
-    self.table.tableHeaderView = self.search.searchBar;
-    self.definesPresentationContext = YES;
+    self.icons = [NSCache new];
+    self.icons.countLimit = 64;
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reloadApplications)
+        name:UIApplicationDidBecomeActiveNotification object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reloadApplications)
+        name:NoAcclPolicyChanged object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self reloadApplications];
+}
+
+- (void)reloadApplications {
+    if (!self.isViewLoaded) return;
     dlopen("/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices", RTLD_LAZY);
     NSMutableDictionary *apps = [NSMutableDictionary dictionary];
+    NSSet<NSString *> *requested = NoAcclRequestedBundleIDs();
+    NSDictionary *decisions = NoAcclAllDecisions();
+    self.decisions = decisions;
     Class workspaceClass = NSClassFromString(@"LSApplicationWorkspace");
     if ([workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
         for (LSApplicationProxy *proxy in [[workspaceClass defaultWorkspace] allInstalledApplications]) {
             NSString *identifier = proxy.bundleIdentifier;
-            if (!identifier.length || [identifier isEqual:@"com.apple.springboard"]) continue;
+            if (!identifier.length || [identifier isEqual:@"com.apple.springboard"] ||
+                (![requested containsObject:identifier] && !decisions[identifier])) continue;
             apps[identifier] = @{@"id": identifier, @"name": proxy.localizedName ?: identifier, @"installed": @YES};
         }
     }
-    for (NSString *identifier in NoAcclAllDecisions()) {
+    NSMutableSet *visibleIDs = [requested mutableCopy];
+    [visibleIDs addObjectsFromArray:decisions.allKeys];
+    for (NSString *identifier in visibleIDs) {
         if (!apps[identifier]) apps[identifier] = @{@"id": identifier, @"name": identifier, @"installed": @NO};
     }
     self.applications = [apps.allValues sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
         return [a[@"name"] localizedStandardCompare:b[@"name"]];
     }];
-    [self updateSearchResultsForSearchController:self.search];
+    [self.table reloadData];
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)controller {
-    NSString *query = controller.searchBar.text ?: @"";
-    self.filtered = query.length ? [self.applications filteredArrayUsingPredicate:
-        [NSPredicate predicateWithBlock:^BOOL(NSDictionary *app, NSDictionary *bindings) {
-            return [app[@"name"] localizedCaseInsensitiveContainsString:query] ||
-                [app[@"id"] localizedCaseInsensitiveContainsString:query];
-        }]] : self.applications;
-    [self.table reloadData];
+- (UIImage *)iconForApplication:(NSDictionary *)app {
+    if (![app[@"installed"] boolValue]) return [UIImage systemImageNamed:@"app"];
+    NSString *identifier = app[@"id"];
+    UIImage *icon = [self.icons objectForKey:identifier];
+    if (!icon && [UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+        icon = [UIImage _applicationIconImageForBundleIdentifier:identifier
+            format:MIIconVariantSmall scale:self.view.traitCollection.displayScale];
+        if (icon) [self.icons setObject:icon forKey:identifier];
+    }
+    return icon ?: [UIImage systemImageNamed:@"app"];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 3; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return section == 1 ? self.filtered.count : 1;
+    return section == 1 ? self.applications.count : 1;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 0) return @"开启后默认拒绝。允许后加入白名单；“拒绝，下次再说”只影响本次应用进程。设备运动数据也受保护，可能影响姿态功能。";
-    if (section == 1) return @"未设置的应用会在首次前台请求时询问。后台请求默认阻断。仅保护成功注入的应用及支持的 Core Motion 接口。";
+    if (section == 0) return @"开启后，仅允许已授权的应用读取运动数据。";
+    if (section == 1) return @"仅显示请求过运动数据或已有权限记录的应用。";
     return nil;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -89,12 +103,18 @@
         cell.textLabel.text = @"重置全部权限";
         cell.textLabel.textColor = UIColor.systemRedColor;
     } else {
-        NSDictionary *app = self.filtered[indexPath.row];
-        NSInteger decision = [NoAcclAllDecisions()[app[@"id"]] integerValue];
-        NSString *status = decision == NoAcclDecisionAllow ? @"允许" : decision == NoAcclDecisionPermanentDeny ? @"永久拒绝" : @"询问（默认阻断）";
-        cell.textLabel.text = app[@"name"];
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@%@", status, app[@"id"], [app[@"installed"] boolValue] ? @"" : @" · 未安装"];
-        cell.detailTextLabel.numberOfLines = 2;
+        NSDictionary *app = self.applications[indexPath.row];
+        NSInteger decision = [self.decisions[app[@"id"]] integerValue];
+        NSString *status = decision == NoAcclDecisionAllow ? @"允许" : decision == NoAcclDecisionPermanentDeny ? @"拒绝" : @"询问（默认阻断）";
+        UIListContentConfiguration *content = [UIListContentConfiguration subtitleCellConfiguration];
+        content.text = app[@"name"];
+        content.secondaryText = [NSString stringWithFormat:@"%@ · %@%@", status, app[@"id"], [app[@"installed"] boolValue] ? @"" : @" · 未安装"];
+        content.secondaryTextProperties.numberOfLines = 2;
+        content.image = [self iconForApplication:app];
+        content.imageProperties.maximumSize = CGSizeMake(32, 32);
+        content.imageProperties.reservedLayoutSize = CGSizeMake(32, 32);
+        content.imageProperties.cornerRadius = 7;
+        cell.contentConfiguration = content;
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
     return cell;
@@ -109,19 +129,19 @@
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
             NoAcclResetAllDecisions();
-            [self.table reloadData];
+            [self reloadApplications];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
     }
-    NSDictionary *app = self.filtered[indexPath.row];
+    NSDictionary *app = self.applications[indexPath.row];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:app[@"name"] message:app[@"id"] preferredStyle:UIAlertControllerStyleAlert];
-    NSArray *titles = @[@"允许", @"永久拒绝", @"下次询问"];
+    NSArray *titles = @[@"允许", @"拒绝", @"下次询问"];
     NSArray *values = @[@(NoAcclDecisionAllow), @(NoAcclDecisionPermanentDeny), @(NoAcclDecisionAsk)];
     for (NSUInteger index = 0; index < titles.count; index++) {
         [alert addAction:[UIAlertAction actionWithTitle:titles[index] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
             NoAcclSetDecisionForBundle(app[@"id"], [values[index] integerValue]);
-            [self.table reloadData];
+            [self reloadApplications];
         }]];
     }
     if (![app[@"installed"] boolValue]) {

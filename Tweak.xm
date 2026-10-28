@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #import <stdatomic.h>
 #import "NoAcclPolicy.h"
+#import "NoAcclStore.h"
 
 @interface NAStream : NSObject
 @property (nonatomic, copy) dispatch_block_t resume;
@@ -36,6 +37,7 @@ static void NoteBlockedRequest(void) {
 }
 
 static BOOL Allowed(void) {
+    NoAcclMarkCurrentProcessRequested();
     BOOL allowed = NoAcclDecisionForCurrentProcess() == NoAcclDecisionAllow;
     if (!allowed) NoteBlockedRequest();
     return allowed;
@@ -282,7 +284,11 @@ static void PolicyChanged(void) {
     @autoreleasepool {
         NSString *identifier = NSBundle.mainBundle.bundleIdentifier;
         BOOL isApplication = [NSBundle.mainBundle.bundlePath hasSuffix:@".app"];
-        if (!isApplication || !identifier.length || [identifier isEqual:@"com.apple.springboard"]) return;
+        if ([identifier isEqual:@"com.apple.springboard"]) {
+            NoAcclStartStoreServer();
+            return;
+        }
+        if (!isApplication || !identifier.length) return;
         managers = [NSHashTable weakObjectsHashTable];
         NoAcclInitializePolicy();
         [NSNotificationCenter.defaultCenter addObserverForName:NoAcclPolicyChanged object:nil

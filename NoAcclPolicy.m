@@ -2,17 +2,27 @@
 #import "NoAcclPolicy.h"
 #import "NoAcclRule.h"
 #import <UIKit/UIKit.h>
-#import <Cephei/HBPreferences.h>
+#import "NoAcclStore.h"
 #import <stdatomic.h>
 
 NSString * const NoAcclPolicyChanged = @"NoAcclPolicyChanged";
-static HBPreferences *preferences;
+static NoAcclStore *preferences;
 static atomic_int cachedDecision;
+static atomic_bool requestMarkQueued;
 static BOOL temporaryDenied;
 static BOOL promptScheduled;
+static BOOL retryScheduled;
 static BOOL pendingRequest;
 static UIAlertController *permissionAlert;
 static id lastRule;
+
+static BOOL PersistObject(id value, NSString *key) {
+    return key.length && [preferences setObject:value forKey:key];
+}
+
+static void RemovePersistedObject(NSString *key) {
+    if (key.length) [preferences removeObjectForKey:key];
+}
 
 NSString *NoAcclBundleIdentifier(void) {
     return NSBundle.mainBundle.bundleIdentifier ?: @"unknown";
@@ -23,7 +33,7 @@ static void Broadcast(void) {
         CFSTR("com.noaccl.tweak/ReloadPrefs"), NULL, NULL, YES);
 }
 
-static void Refresh(void) {
+static void Refresh(BOOL notifyObservers) {
     id rule = [preferences objectForKey:NoAcclRuleKey(NoAcclBundleIdentifier())];
     if (!(rule == lastRule || [rule isEqual:lastRule])) temporaryDenied = NO;
     lastRule = rule;
@@ -36,22 +46,37 @@ static void Refresh(void) {
         permissionAlert = nil;
         promptScheduled = NO;
     }
-    [NSNotificationCenter.defaultCenter postNotificationName:NoAcclPolicyChanged object:nil];
+    if (notifyObservers) {
+        [NSNotificationCenter.defaultCenter postNotificationName:NoAcclPolicyChanged object:nil];
+    }
+}
+
+static void RetryPendingRequest(void) {
+    if (!pendingRequest || retryScheduled) return;
+    retryScheduled = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        retryScheduled = NO;
+        if (pendingRequest) NoAcclPresentFirstRequestIfNeeded();
+    });
 }
 
 void NoAcclInitializePolicy(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        preferences = [[HBPreferences alloc] initWithIdentifier:@"com.noaccl.tweak"];
-        [preferences registerDefaults:@{@"Enabled": @YES}];
+        preferences = [NoAcclStore new];
         [preferences registerPreferenceChangeBlock:^{
-            dispatch_async(dispatch_get_main_queue(), ^{ Refresh(); });
+            dispatch_async(dispatch_get_main_queue(), ^{ Refresh(YES); });
         }];
         [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
             object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *notification) {
                 if (pendingRequest) NoAcclPresentFirstRequestIfNeeded();
             }];
-        Refresh();
+        [NSNotificationCenter.defaultCenter addObserverForName:UIWindowDidBecomeKeyNotification
+            object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *notification) {
+                if (pendingRequest) NoAcclPresentFirstRequestIfNeeded();
+            }];
+        // Observers may read policy again, so initialization must not notify them inside dispatch_once.
+        Refresh(NO);
     });
 }
 
@@ -67,8 +92,8 @@ BOOL NoAcclEnabled(void) {
 
 void NoAcclSetEnabled(BOOL enabled) {
     NoAcclInitializePolicy();
-    [preferences setBool:enabled forKey:@"Enabled"];
-    Refresh();
+    PersistObject(@(enabled), @"Enabled");
+    Refresh(YES);
     Broadcast();
 }
 
@@ -78,24 +103,28 @@ void NoAcclSetDecisionForBundle(NSString *bundleID, NoAcclDecision decision) {
     if (decision == NoAcclDecisionTemporaryDeny) {
         if ([bundleID isEqual:NoAcclBundleIdentifier()]) {
             temporaryDenied = YES;
-            Refresh();
+            Refresh(YES);
         }
         return;
     }
     // A separate key per app avoids lost updates when two processes grant access concurrently.
     NSDictionary *record = NoAcclRecordForDecision(decision);
-    [preferences setObject:record forKey:NoAcclRuleKey(bundleID)];
+    if (!PersistObject(record, NoAcclRuleKey(bundleID))) {
+        NSLog(@"[NoAccl] Permission was not saved for %@", bundleID);
+        return;
+    }
     if ([bundleID isEqual:NoAcclBundleIdentifier()]) temporaryDenied = NO;
-    Refresh();
+    Refresh(YES);
     Broadcast();
 }
 
 void NoAcclRemoveDecisionForBundle(NSString *bundleID) {
     NoAcclInitializePolicy();
     if (!bundleID.length) return;
-    [preferences removeObjectForKey:NoAcclRuleKey(bundleID)];
+    RemovePersistedObject(NoAcclRuleKey(bundleID));
+    RemovePersistedObject([@"Requested." stringByAppendingString:bundleID]);
     if ([bundleID isEqual:NoAcclBundleIdentifier()]) temporaryDenied = NO;
-    Refresh();
+    Refresh(YES);
     Broadcast();
 }
 
@@ -108,12 +137,34 @@ NSDictionary *NoAcclAllDecisions(void) {
     return rules;
 }
 
+NSSet<NSString *> *NoAcclRequestedBundleIDs(void) {
+    NoAcclInitializePolicy();
+    NSMutableSet *bundleIDs = [NSMutableSet set];
+    [[preferences dictionaryRepresentation] enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+        if ([key hasPrefix:@"Requested."] && [value boolValue]) {
+            [bundleIDs addObject:[key substringFromIndex:10]];
+        }
+    }];
+    return bundleIDs;
+}
+
+void NoAcclMarkCurrentProcessRequested(void) {
+    NoAcclInitializePolicy();
+    NSString *bundleID = NoAcclBundleIdentifier();
+    if (!bundleID.length) return;
+    if (atomic_exchange(&requestMarkQueued, true)) return;
+    NSString *key = [@"Requested." stringByAppendingString:bundleID];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!PersistObject(@YES, key)) atomic_store(&requestMarkQueued, false);
+    });
+}
+
 void NoAcclResetAllDecisions(void) {
     for (NSString *bundleID in NoAcclAllDecisions()) {
-        [preferences setObject:NoAcclRecordForDecision(NoAcclDecisionAsk) forKey:NoAcclRuleKey(bundleID)];
+        PersistObject(NoAcclRecordForDecision(NoAcclDecisionAsk), NoAcclRuleKey(bundleID));
     }
     temporaryDenied = NO;
-    Refresh();
+    Refresh(YES);
     Broadcast();
 }
 
@@ -138,12 +189,22 @@ static UIViewController *VisibleController(void) {
 }
 
 void NoAcclPresentFirstRequestIfNeeded(void) {
-    if (NoAcclDecisionForCurrentProcess() != NoAcclDecisionAsk) return;
+    pendingRequest = YES;
+    if (NoAcclDecisionForCurrentProcess() != NoAcclDecisionAsk) {
+        pendingRequest = NO;
+        return;
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
-        pendingRequest = YES;
-        if (promptScheduled || NoAcclDecisionForCurrentProcess() != NoAcclDecisionAsk) return;
+        if (promptScheduled || NoAcclDecisionForCurrentProcess() != NoAcclDecisionAsk) {
+            if (NoAcclDecisionForCurrentProcess() != NoAcclDecisionAsk) pendingRequest = NO;
+            return;
+        }
         UIViewController *controller = VisibleController();
-        if (!controller || [controller isKindOfClass:UIAlertController.class]) return;
+        if (!controller) {
+            RetryPendingRequest();
+            return;
+        }
+        if ([controller isKindOfClass:UIAlertController.class]) return;
         promptScheduled = YES;
         NSString *name = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] ?: NoAcclBundleIdentifier();
         permissionAlert = [UIAlertController alertControllerWithTitle:@"NoAccl · 加速度计访问"

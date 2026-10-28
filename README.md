@@ -13,10 +13,10 @@ NoAccl 是面向 iOS 15 及以上 rootless 越狱环境的 Core Motion 访问控
 ## 行为
 
 - 未配置应用首次前台请求时显示「允许」「拒绝，下次再说」「永久拒绝」。
-- 「允许」和「永久拒绝」通过 Cephei `HBPreferences` 持久化到 `com.noaccl.tweak` 域。
+- 「允许」和「永久拒绝」通过 SpringBoard 内的 NoAccl 专用服务原子保存，应用与设置共用 `/var/mobile/Library/Preferences/com.noaccl.tweak.plist`。旧 rootless 配置自动迁移；服务确认保存后才放行，应用只能访问自己的规则。
 - 「拒绝，下次再说」只保存在当前应用进程内存中，进程结束后重新询问。
-- 后台请求或无可见窗口时不弹窗，保持阻断并记录待询问状态。
-- 设置页提供全局开关、应用规则、搜索、重置全部规则和历史规则删除。
+- 后台请求或无可见窗口时不弹窗，保持阻断并记录待询问状态；应用回到前台并获得可见窗口后自动重试询问。
+- 设置页只显示已经请求过加速度计或已有历史规则的应用，应用条目前显示图标，提供全局开关、应用规则、重置全部规则和历史规则删除。
 
 ## 边界
 
@@ -29,7 +29,7 @@ make test
 make package FINALPACKAGE=1
 ```
 
-构建需要 Theos rootless 工具链和 iOS 27.0 SDK，deployment target 为 iOS 15.0。当前 Cydia 发布版本为 `0.2.1`。产物分别位于 `packages/` 与 `probe/packages/`。
+构建需要 Theos rootless 工具链和 iOS 27.0 SDK，deployment target 为 iOS 15.0。当前版本为 `0.2.4`。产物分别位于 `packages/` 与 `probe/packages/`。
 
 ## 安装
 
