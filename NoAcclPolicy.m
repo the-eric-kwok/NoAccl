@@ -1,6 +1,7 @@
 // Created by 郭耀铭 on 2026/10/15.
 #import "NoAcclPolicy.h"
 #import "NoAcclRule.h"
+#import "NoAcclLocalization.h"
 #import <UIKit/UIKit.h>
 #import "NoAcclStore.h"
 #import <stdatomic.h>
@@ -207,10 +208,10 @@ void NoAcclPresentFirstRequestIfNeeded(void) {
         if ([controller isKindOfClass:UIAlertController.class]) return;
         promptScheduled = YES;
         NSString *name = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] ?: NoAcclBundleIdentifier();
-        permissionAlert = [UIAlertController alertControllerWithTitle:@"NoAccl · 加速度计访问"
-            message:[NSString stringWithFormat:@"“%@”请求运动传感器数据。未允许前不会提供加速度或设备运动数据。", name]
+        permissionAlert = [UIAlertController alertControllerWithTitle:NoAcclLocalizedString(@"NoAccl · Motion Access")
+            message:[NSString stringWithFormat:NoAcclLocalizedString(@"“%@” wants to read motion data. Access is blocked until you allow it."), name]
             preferredStyle:UIAlertControllerStyleAlert];
-        NSArray *titles = @[@"允许", @"拒绝，下次再说", @"永久拒绝"];
+        NSArray *titles = @[NoAcclLocalizedString(@"Allow"), NoAcclLocalizedString(@"Deny for Now"), NoAcclLocalizedString(@"Always Deny")];
         for (NSInteger index = 0; index < titles.count; index++) {
             NoAcclDecision decision = (NoAcclDecision)(index + 1);
             [permissionAlert addAction:[UIAlertAction actionWithTitle:titles[index]

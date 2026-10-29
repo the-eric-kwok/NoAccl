@@ -3,6 +3,7 @@
 #import <UIKit/UIImage+Private.h>
 #import <dlfcn.h>
 #import "../NoAcclPolicy.h"
+#import "../NoAcclLocalization.h"
 
 @interface LSApplicationWorkspace : NSObject
 + (instancetype)defaultWorkspace;
@@ -87,28 +88,29 @@
     return section == 1 ? self.applications.count : 1;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 0) return @"开启后，仅允许已授权的应用读取运动数据。";
-    if (section == 1) return @"仅显示请求过运动数据或已有权限记录的应用。";
+    if (section == 0) return NoAcclLocalizedString(@"When enabled, only allowed apps can access motion data.");
+    if (section == 1) return NoAcclLocalizedString(@"Shows apps that requested motion data or have a saved permission.");
     return nil;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
     if (indexPath.section == 0) {
-        cell.textLabel.text = @"启用保护";
+        cell.textLabel.text = NoAcclLocalizedString(@"Enable Protection");
         UISwitch *toggle = [UISwitch new];
         toggle.on = NoAcclEnabled();
         [toggle addTarget:self action:@selector(toggleProtection:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = toggle;
     } else if (indexPath.section == 2) {
-        cell.textLabel.text = @"重置全部权限";
+        cell.textLabel.text = NoAcclLocalizedString(@"Reset All Permissions");
         cell.textLabel.textColor = UIColor.systemRedColor;
     } else {
         NSDictionary *app = self.applications[indexPath.row];
         NSInteger decision = [self.decisions[app[@"id"]] integerValue];
-        NSString *status = decision == NoAcclDecisionAllow ? @"允许" : decision == NoAcclDecisionPermanentDeny ? @"拒绝" : @"询问（默认阻断）";
+        NSString *status = NoAcclLocalizedString(decision == NoAcclDecisionAllow ? @"Allow" : decision == NoAcclDecisionPermanentDeny ? @"Deny" : @"Ask (Block by Default)");
         UIListContentConfiguration *content = [UIListContentConfiguration subtitleCellConfiguration];
         content.text = app[@"name"];
-        content.secondaryText = [NSString stringWithFormat:@"%@ · %@%@", status, app[@"id"], [app[@"installed"] boolValue] ? @"" : @" · 未安装"];
+        NSString *suffix = [app[@"installed"] boolValue] ? @"" : [NSString stringWithFormat:@" · %@", NoAcclLocalizedString(@"Not Installed")];
+        content.secondaryText = [NSString stringWithFormat:@"%@ · %@%@", status, app[@"id"], suffix];
         content.secondaryTextProperties.numberOfLines = 2;
         content.image = [self iconForApplication:app];
         content.imageProperties.maximumSize = CGSizeMake(32, 32);
@@ -124,10 +126,10 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section == 0) return;
     if (indexPath.section == 2) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重置全部权限？"
-            message:@"应用将在下次前台请求时重新询问。" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:NoAcclLocalizedString(@"Reset All Permissions?")
+            message:NoAcclLocalizedString(@"Apps will ask again the next time they request motion data in the foreground.") preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:NoAcclLocalizedString(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:NoAcclLocalizedString(@"Reset") style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
             NoAcclResetAllDecisions();
             [self reloadApplications];
         }]];
@@ -136,7 +138,7 @@
     }
     NSDictionary *app = self.applications[indexPath.row];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:app[@"name"] message:app[@"id"] preferredStyle:UIAlertControllerStyleAlert];
-    NSArray *titles = @[@"允许", @"拒绝", @"下次询问"];
+    NSArray *titles = @[NoAcclLocalizedString(@"Allow"), NoAcclLocalizedString(@"Deny"), NoAcclLocalizedString(@"Ask Next Time")];
     NSArray *values = @[@(NoAcclDecisionAllow), @(NoAcclDecisionPermanentDeny), @(NoAcclDecisionAsk)];
     for (NSUInteger index = 0; index < titles.count; index++) {
         [alert addAction:[UIAlertAction actionWithTitle:titles[index] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
@@ -145,12 +147,12 @@
         }]];
     }
     if (![app[@"installed"] boolValue]) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"删除历史规则" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [alert addAction:[UIAlertAction actionWithTitle:NoAcclLocalizedString(@"Delete Saved Permission") style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
             NoAcclRemoveDecisionForBundle(app[@"id"]);
             [self viewWillAppear:NO];
         }]];
     }
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:NoAcclLocalizedString(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 @end
