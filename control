@@ -1,6 +1,6 @@
 Package: com.noaccl.tweak
 Name: NoAccl
-Version: 0.2.4-1
+Version: 0.2.5
 Architecture: iphoneos-arm
 Description: Theoretically supports iOS 15+ jailbreaks; tested on iOS 15 only.
 Maintainer: 郭耀铭
